@@ -62,8 +62,6 @@ class BgpMonitor(app_manager.RyuApp):
                     msg, rest = bmp.BMPMessage.parser(buf)
                 except Exception, e:
                     pkt = buf[:len_]
-                    self.failed_dump_fd.write(pkt)
-                    self.failed_dump_fd.flush()
                     buf = buf[len_:]
                     self.failed_pkt_count += 1
                     self.logger.error("failed to parse: %s"
@@ -97,7 +95,7 @@ class BgpMonitor(app_manager.RyuApp):
         if time_delta < 30:
             bmp_result['received_time'] = bgp_t
             bmp_result['received_host'] = addr[0]
-            bmp_result['type'] = "adj_up"
+            bmp_result['event_type'] = "adj_up"
             bmp_result['peer_as'] = peer_as
             bmp_result['peer_bgp_id'] = peer_bgp_id
             bmp_result['prefix'] = None
@@ -114,7 +112,7 @@ class BgpMonitor(app_manager.RyuApp):
         now_t = time.strftime("%Y/%m/%d %H:%M:%S", time.localtime())
         bmp_result['received_time'] = now_t
         bmp_result['received_host'] = addr[0]
-        bmp_result['type'] = "adj_down"
+        bmp_result['event_type'] = "adj_down"
         bmp_result['peer_as'] = peer_as
         bmp_result['peer_bgp_id'] = peer_bgp_id
         bmp_result['prefix'] = None
@@ -168,7 +166,7 @@ class BgpMonitor(app_manager.RyuApp):
                 bmp_result['peer_bgp_id'] = peer_bgp_id
                 if isinstance(data, bgp.BGPPathAttributeMpUnreachNLRI):
                     del_nlri = data.withdrawn_routes[0]
-                    bmp_result['type'] = "adj_rib_in_changed(withdraw)"
+                    bmp_result['event_type'] = "adj_rib_in_changed(withdraw)"
                     bmp_result['prefix'] = del_nlri.prefix
                     bmp_result['route_dist'] = del_nlri.route_dist
                     bmp_result['vpnv4_prefix'] = del_nlri.formatted_nlri_str
@@ -177,7 +175,7 @@ class BgpMonitor(app_manager.RyuApp):
                     LOG.debug("bmp_result=%s"%bmp_result)
                 elif isinstance(data, bgp.BGPPathAttributeMpReachNLRI):
                     nlri = data.nlri[0]
-                    bmp_result['type'] = "adj_rib_in_changed"
+                    bmp_result['event_type'] = "adj_rib_in_changed"
                     bmp_result['prefix'] = nlri.prefix
                     bmp_result['route_dist'] = nlri.route_dist
                     bmp_result['vpnv4_prefix'] = nlri.formatted_nlri_str
