@@ -178,16 +178,17 @@ class TestAutomation(app_manager.RyuApp):
                             ping_result = "NG"
                         else:
                             ping_result = "??"
-                    LOG.info(ping_recv)
-                    self.eventList[event_id].add_ping_recv(ping_recv)
-                    self.eventList[event_id].add_ping_result(ping_result)
-                    event_time = self.eventList[event_id].event_time
-                    event_type = self.eventList[event_id].event_type
-                    output = "%s [%s] [%s] [%s]\n"%(event_time, event_id,
-                              ping_result, event_type)
-                    self.test_result.write(output)
-                    self.test_result.flush()
-                    LOG.info("EventResult: [%s]"%output)
+                        LOG.info(ping_recv)
+                        self.eventList[event_id].add_ping_recv(ping_recv)
+                        self.eventList[event_id].add_ping_result(ping_result)
+                        event_time = self.eventList[event_id].event_time
+                        event_type = self.eventList[event_id].event_type
+                        output = "%s [%s] [%s] [%s]\n"%(event_time, event_id,
+                                  ping_result, event_type)
+                        self.test_result.write(output)
+                        self.test_result.flush()
+                        LOG.info("EventResult: [%s]"%output)
+                        tp.close()
             hub.sleep(1)
 
     def loop_show(self):

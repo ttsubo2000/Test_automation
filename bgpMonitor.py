@@ -129,24 +129,40 @@ class BgpMonitor(app_manager.RyuApp):
             self.print_l3vpn(msg, addr)
 
     def print_global(self, msg, addr):
+        bmp_result = {}
         peer_as = msg.peer_as
         peer_bgp_id = msg.peer_bgp_id
         bgp_t = time.strftime("%Y/%m/%d %H:%M:%S",
                                time.localtime(int(msg.timestamp)))
-
-        if msg.bgp_update.withdrawn_routes:
-            del_nlri = msg.bgp_update.withdrawn_routes[0]
-            del_prefix = del_nlri.prefix
-            LOG.info("%s %s %s | BGP_Update_withdraw(prefix:%-18s)"
-                      %(bgp_t, peer_as, peer_bgp_id, del_prefix))
-        else:
-            nlri = msg.bgp_update.nlri[0]
-            prefix = nlri.prefix
-            for data in msg.bgp_update.path_attributes:
-                if isinstance(data, bgp.BGPPathAttributeNextHop):
-                    nexthop = data.value
-                    LOG.info("%s %s %s | BGP_Update(prefix:%-18s,nexthop:%-15s)"
-                              %(bgp_t, peer_as, peer_bgp_id, prefix, nexthop))
+        now_t = time.strftime("%Y/%m/%d %H:%M:%S", time.localtime())
+        time1 = time.mktime(time.localtime(int(msg.timestamp)))
+        time2 = time.mktime(time.localtime())
+        time_delta = time2 - time1
+        if time_delta < 60:
+            bmp_result['received_time'] = bgp_t
+            bmp_result['received_host'] = addr[0]
+            bmp_result['peer_as'] = peer_as
+            bmp_result['peer_bgp_id'] = peer_bgp_id
+            if msg.bgp_update.withdrawn_routes:
+                del_nlri = msg.bgp_update.withdrawn_routes[0]
+                bmp_result['event_type'] = "adj_rib_in_changed(withdraw)"
+                bmp_result['prefix'] = del_nlri.prefix
+                bmp_result['route_dist'] = None
+                bmp_result['vpnv4_prefix'] = None
+                bmp_result['nexthop'] = None
+                self.bmp_q.put(bmp_result)
+                LOG.debug("bmp_result=%s"%bmp_result)
+            else:
+                nlri = msg.bgp_update.nlri[0]
+                bmp_result['event_type'] = "adj_rib_in_changed"
+                bmp_result['prefix'] = nlri.prefix
+                bmp_result['route_dist'] = None
+                bmp_result['vpnv4_prefix'] = None
+                for data in msg.bgp_update.path_attributes:
+                    if isinstance(data, bgp.BGPPathAttributeNextHop):
+                        bmp_result['nexthop'] = data.next_hop
+                self.bmp_q.put(bmp_result)
+                LOG.debug("bmp_result=%s"%bmp_result)
 
     def print_l3vpn(self, msg, addr):
         bmp_result = {}
