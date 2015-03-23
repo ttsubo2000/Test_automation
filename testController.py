@@ -8,6 +8,7 @@ import datetime
 import time
 import getpass
 import paramiko
+import telnetlib
 
 from bgpMonitor import BgpMonitor
 from webob import Response
@@ -24,7 +25,7 @@ PING_NG = "0 received, 100% packet loss"
 
 class TargetTable(object):
     def __init__(self, peer_as, ping_srcip, ping_destip, ssh_host, ssh_user,
-                 ssh_pass):
+                 ssh_pass, show_type):
         self.targetInfo = {}
         self.targetInfo['peer_as'] = peer_as
         self.targetInfo['ping_srcip'] = ping_srcip
@@ -32,6 +33,7 @@ class TargetTable(object):
         self.targetInfo['ssh_host'] = ssh_host
         self.targetInfo['ssh_user'] = ssh_user
         self.targetInfo['ssh_pass'] = ssh_pass
+        self.targetInfo['show_type'] = show_type
 
     def get_all(self):
         return self.targetInfo
@@ -94,10 +96,10 @@ class TestAutomation(app_manager.RyuApp):
         self.test_result = open("Test_result.txt", 'w')
 
     def regist_pingTarget(self, peer_as, vpnv4_prefix, ping_srcip, ping_destip,
-                          ssh_host, ssh_user, ssh_pass):
+                          ssh_host, ssh_user, ssh_pass, show_type):
         self.targetInfoList[vpnv4_prefix] = TargetTable(peer_as, ping_srcip,
                                                         ping_destip, ssh_host,
-                                                        ssh_user, ssh_pass)
+                                                        ssh_user, ssh_pass, show_type)
     def show_eventDetail(self, search_event_id):
         for event_id, eventResult in self.eventList.items():
             if str(event_id) == search_event_id:
@@ -110,9 +112,13 @@ class TestAutomation(app_manager.RyuApp):
             if not self.bmp.bmp_q.empty():
                 bmp_result = self.bmp.bmp_q.get()
                 LOG.debug("bmp_result=[%s]"%bmp_result)
+                if bmp_result['vpnv4_prefix'] == None:
+                    target_prefix = bmp_result['prefix']
+                else:
+                    target_prefix = bmp_result['vpnv4_prefix']
 
                 for vpnv4_prefix, target in self.targetInfoList.items():
-                    if vpnv4_prefix == bmp_result['vpnv4_prefix']:
+                    if vpnv4_prefix == target_prefix:
                         target_info = target.get_all()
                         if target_info['peer_as'] == str(bmp_result['peer_as']):
                             buf_info1 = []
@@ -123,6 +129,7 @@ class TestAutomation(app_manager.RyuApp):
                             self.ping_target_q.put(buf_info1)
                             buf_info2.append(event_id)
                             buf_info2.append(bmp_result)
+                            buf_info2.append(target_info['show_type'])
                             self.show_target_q.put(buf_info2)
                             event_time = time.strftime("%Y/%m/%d %H:%M:%S",
                                                        time.localtime())
@@ -135,6 +142,7 @@ class TestAutomation(app_manager.RyuApp):
                                                    bmp_result['nexthop'],
                                                    event_time,
                                                    event_id)
+                            LOG.debug("eventList=[%s]"%self.eventList[event_id].get_all())
             hub.sleep(1)
 
     def loop_ping(self):
@@ -197,29 +205,42 @@ class TestAutomation(app_manager.RyuApp):
                 buf_info = self.show_target_q.get()
                 event_id = buf_info[0]
                 bmp_result = buf_info[1]
-                rest_host = bmp_result['received_host']
-                address = bmp_result['nexthop']
-                if address:
-                    self.show_neighbor(rest_host, address, event_id)
+                show_type = buf_info[2]
+                target_host = bmp_result['received_host']
+                neighbor_address = bmp_result['nexthop']
+                if neighbor_address:
+                    self.show_neighbor(show_type, target_host, neighbor_address, event_id)
                 else:
                     self.eventList[event_id].add_show_neighbor_result("N/A")
                     
-                self.show_rib(rest_host, event_id)
+                self.show_rib(show_type, target_host, event_id)
             hub.sleep(1)
 
-    def show_neighbor(self, rest_host, address, event_id):
-        show_cmd = "bgpd> show neighbor received-routes " + address + " all\n" 
-        show_neighbor_result = self.rest_get_neighbor(rest_host, address)
-        show_neighbor_result = show_cmd + show_neighbor_result
+    def show_neighbor(self, show_type, target_host, neighbor_address, event_id):
+        if show_type == "rest":
+            show_cmd = "bgpd> show neighbor received-routes " + neighbor_address + " all\n" 
+            show_neighbor_result = self.rest_get_neighbor(target_host, neighbor_address)
+            show_neighbor_result = show_cmd + show_neighbor_result
+        elif show_type == "cli":
+            show_neighbor_result = self.cli_get_neighbor(target_host, neighbor_address)
+        else:
+            show_neighbor_result = "N/A"
+
         LOG.info("------------------")
         LOG.info(show_neighbor_result)
         LOG.info("------------------")
         self.eventList[event_id].add_show_neighbor_result(show_neighbor_result)
 
-    def show_rib(self, rest_host, event_id):
-        show_cmd = "bgpd> show rib vpnv4\n" 
-        show_rib_result = self.rest_get_rib(rest_host)
-        show_rib_result = show_cmd + show_rib_result
+    def show_rib(self, show_type, target_host, event_id):
+        if show_type == "rest":
+            show_cmd = "bgpd> show rib vpnv4\n" 
+            show_rib_result = self.rest_get_rib(target_host)
+            show_rib_result = show_cmd + show_rib_result
+        elif show_type == "cli":
+            show_rib_result = self.cli_get_rib(target_host)
+        else:
+            show_rib_result = "N/A"
+
         LOG.info("------------------")
         LOG.info(show_rib_result)
         LOG.info("------------------")
@@ -242,6 +263,13 @@ class TestAutomation(app_manager.RyuApp):
         result = neighbor_result['neighbor']
         return result
 
+    def cli_get_neighbor(self, cli_host, address):
+        session = telnetlib.Telnet(cli_host)
+        cli_content = "show bgp all neighbors " + address + " received-routes\n"
+        session.write(cli_content)
+        session.write("exit\n")
+        return session.read_all()
+
     def rest_get_rib(self, rest_host):
         dpid = "0000000000000001"
         operation = "get_rib"
@@ -252,6 +280,13 @@ class TestAutomation(app_manager.RyuApp):
                                        rest_host)
         result = rib_result['rib']
         return result
+
+    def cli_get_rib(self, cli_host):
+        session = telnetlib.Telnet(cli_host)
+        cli_content = "show bgp all\n"
+        session.write(cli_content)
+        session.write("exit\n")
+        return session.read_all()
 
     def request_info(self, operator, url_path, method, request, host):
         port = "8080"
@@ -309,8 +344,9 @@ class TestController(ControllerBase):
         ssh_host = pingTarget_param['target']['ssh_host']
         ssh_user = pingTarget_param['target']['ssh_user']
         ssh_pass = pingTarget_param['target']['ssh_pass']
+        show_type = pingTarget_param['target']['show_type']
         testCtrl.regist_pingTarget(peer_as, vpnv4_prefix, ping_srcip,
-                                   ping_destip, ssh_host, ssh_user, ssh_pass)
+                                   ping_destip, ssh_host, ssh_user, ssh_pass, show_type)
         return {
             'target': {
                 'peer_as': '%s' % peer_as,
@@ -320,6 +356,7 @@ class TestController(ControllerBase):
                 'ssh_host': '%s' % ssh_host,
                 'ssh_user': '%s' % ssh_user,
                 'ssh_pass': '%s' % ssh_pass,
+                'show_type': '%s' % show_type,
             }
         }
 
