@@ -31,7 +31,6 @@ class BgpMonitor(app_manager.RyuApp):
         self.name = 'bmp'
 
     def start(self):
-        self.targetInfo = {}
         super(BgpMonitor, self).start()
         return hub.spawn(StreamServer(ADDR, self.handler).serve_forever)
 
@@ -128,18 +127,12 @@ class BgpMonitor(app_manager.RyuApp):
         LOG.debug("bmp_result=%s"%bmp_result)
 
     def print_BMPRouteMonitoring(self, msg, addr):
-        if msg.peer_type == bmp.BMP_PEER_TYPE_GLOBAL:
-            self.print_global(msg, addr)
-        elif msg.peer_type == bmp.BMP_PEER_TYPE_L3VPN:
-            self.print_l3vpn(msg, addr)
-
-    def print_global(self, msg, addr):
         if msg.timestamp == 0:
             bgp_t = time.strftime("%Y/%m/%d %H:%M:%S", time.localtime())
             if isinstance(msg.bgp_update, bgp.BGPRouteRefresh):
-                self.print_BGP_RouteRefresh(bmp_result)
+                self.extract_BGP_RouteRefresh(msg, addr, bgp_t)
             elif isinstance(msg.bgp_update, bgp.BGPUpdate):
-                self.print_BGP_Update(msg, addr, bgp_t)
+                self.extract_BGP_Update(msg, addr, bgp_t)
         else:
             bgp_t = time.strftime("%Y/%m/%d %H:%M:%S",
                                    time.localtime(int(msg.timestamp)))
@@ -149,11 +142,11 @@ class BgpMonitor(app_manager.RyuApp):
             time_delta = time2 - time1
             if time_delta < 60:
                 if isinstance(msg.bgp_update, bgp.BGPRouteRefresh):
-                    self.print_BGP_RouteRefresh(msg, addr, bgp_t)
+                    self.extract_BGP_RouteRefresh(msg, addr, bgp_t)
                 elif isinstance(msg.bgp_update, bgp.BGPUpdate):
-                    self.print_BGP_Update(msg, addr, bgp_t)
+                    self.extract_BGP_Update(msg, addr, bgp_t)
 
-    def print_BGP_RouteRefresh(self, msg, addr, bgp_t):
+    def extract_BGP_RouteRefresh(self, msg, addr, bgp_t):
         bmp_result = {}
         bmp_result['received_time'] = bgp_t
         bmp_result['received_host'] = addr[0]
@@ -167,60 +160,44 @@ class BgpMonitor(app_manager.RyuApp):
         self.bmp_q.put(bmp_result)
         LOG.debug("bmp_result=%s"%bmp_result)
 
-    def print_BGP_Update(self, msg, addr, bgp_t):
+    def extract_BGP_Update(self, msg, addr, bgp_t):
         bmp_result = {}
         bmp_result['received_time'] = bgp_t
         bmp_result['received_host'] = addr[0]
         bmp_result['peer_as'] = msg.peer_as
         bmp_result['peer_bgp_id'] = msg.peer_bgp_id
+
         if msg.bgp_update.withdrawn_routes:
-            for del_nlri in msg.bgp_update.withdrawn_routes:
-                bmp_result['event_type'] = "adj_rib_in_changed(withdraw)"
-                bmp_result['prefix'] = del_nlri.prefix
-                bmp_result['route_dist'] = None
-                bmp_result['vpnv4_prefix'] = None
-                bmp_result['nexthop'] = None
-                self.bmp_q.put(bmp_result)
-                LOG.debug("bmp_result=%s"%bmp_result)
+            self.extract_bgp4_withdraw(msg, bmp_result)
+        elif msg.bgp_update.nlri:
+            self.extract_bgp4_nlri(msg, bmp_result)
         else:
-            for nlri in msg.bgp_update.nlri:
-                bmp_result['event_type'] = "adj_rib_in_changed"
-                bmp_result['prefix'] = nlri.prefix
-                bmp_result['route_dist'] = None
-                bmp_result['vpnv4_prefix'] = None
-                for data in msg.bgp_update.path_attributes:
-                    if isinstance(data, bgp.BGPPathAttributeNextHop):
-                        bmp_result['nexthop'] = data.value
-                self.bmp_q.put(bmp_result)
-                LOG.debug("bmp_result=%s"%bmp_result)
+            self.extract_mpbgp(msg, bmp_result)
 
-    def print_l3vpn(self, msg, addr):
-        if msg.timestamp == 0:
-            bgp_t = time.strftime("%Y/%m/%d %H:%M:%S", time.localtime())
-            if isinstance(msg.bgp_update, bgp.BGPRouteRefresh):
-                self.print_MpBGP_RouteRefresh(bmp_result)
-            elif isinstance(msg.bgp_update, bgp.BGPUpdate):
-                self.print_MpBGP_Update(msg, addr, bgp_t)
-        else:
-            bgp_t = time.strftime("%Y/%m/%d %H:%M:%S",
-                                   time.localtime(int(msg.timestamp)))
-            now_t = time.strftime("%Y/%m/%d %H:%M:%S", time.localtime())
-            time1 = time.mktime(time.localtime(int(msg.timestamp)))
-            time2 = time.mktime(time.localtime())
-            time_delta = time2 - time1
-            if time_delta < 60:
-                if isinstance(msg.bgp_update, bgp.BGPRouteRefresh):
-                    self.print_MpBGP_RouteRefresh(bmp_result)
-                elif isinstance(msg.bgp_update, bgp.BGPUpdate):
-                    self.print_MpBGP_Update(msg, addr, bgp_t)
+    def extract_bgp4_withdraw(self, msg, bmp_result):
+        for del_nlri in msg.bgp_update.withdrawn_routes:
+            bmp_result['event_type'] = "adj_rib_in_changed(withdraw)"
+            bmp_result['prefix'] = del_nlri.prefix
+            bmp_result['route_dist'] = None
+            bmp_result['vpnv4_prefix'] = None
+            bmp_result['nexthop'] = None
+            self.bmp_q.put(bmp_result)
+            LOG.debug("bmp_result=%s"%bmp_result)
 
-    def print_MpBGP_Update(self, msg, addr, bgp_t):
+    def extract_bgp4_nlri(self, msg, bmp_result):
+        for add_nlri in msg.bgp_update.nlri:
+            bmp_result['event_type'] = "adj_rib_in_changed"
+            bmp_result['prefix'] = add_nlri.prefix
+            bmp_result['route_dist'] = None
+            bmp_result['vpnv4_prefix'] = None
+            for data in msg.bgp_update.path_attributes:
+                if isinstance(data, bgp.BGPPathAttributeNextHop):
+                    bmp_result['nexthop'] = data.value
+            self.bmp_q.put(bmp_result)
+            LOG.debug("bmp_result=%s"%bmp_result)
+
+    def extract_mpbgp(self, msg, bmp_result):
         for data in msg.bgp_update.path_attributes:
-            bmp_result = {}
-            bmp_result['received_time'] = bgp_t
-            bmp_result['received_host'] = addr[0]
-            bmp_result['peer_as'] = msg.peer_as
-            bmp_result['peer_bgp_id'] = msg.peer_bgp_id
             if isinstance(data, bgp.BGPPathAttributeMpUnreachNLRI):
                 for del_nlri in data.withdrawn_routes:
                     bmp_result['event_type'] = "adj_rib_in_changed(withdraw)"
@@ -231,11 +208,11 @@ class BgpMonitor(app_manager.RyuApp):
                     self.bmp_q.put(bmp_result)
                     LOG.debug("bmp_result=%s"%bmp_result)
             elif isinstance(data, bgp.BGPPathAttributeMpReachNLRI):
-                for nlri in data.nlri:
+                for add_nlri in data.nlri:
                     bmp_result['event_type'] = "adj_rib_in_changed"
-                    bmp_result['prefix'] = nlri.prefix
-                    bmp_result['route_dist'] = nlri.route_dist
-                    bmp_result['vpnv4_prefix'] = nlri.formatted_nlri_str
+                    bmp_result['prefix'] = add_nlri.prefix
+                    bmp_result['route_dist'] = add_nlri.route_dist
+                    bmp_result['vpnv4_prefix'] = add_nlri.formatted_nlri_str
                     bmp_result['nexthop'] = data.next_hop
                     self.bmp_q.put(bmp_result)
                     LOG.debug("bmp_result=%s"%bmp_result)

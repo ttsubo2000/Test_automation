@@ -209,7 +209,7 @@ class TestAutomation(app_manager.RyuApp):
                 target_host = bmp_result['received_host']
                 neighbor_address = bmp_result['nexthop']
                 if neighbor_address:
-                    self.show_neighbor(show_type, target_host, neighbor_address, event_id)
+                    self.show_neighbor(show_type, target_host, neighbor_address,                    event_id)
                 else:
                     self.eventList[event_id].add_show_neighbor_result("N/A")
                     
@@ -218,11 +218,14 @@ class TestAutomation(app_manager.RyuApp):
 
     def show_neighbor(self, show_type, target_host, neighbor_address, event_id):
         if show_type == "rest":
-            show_cmd = "bgpd> show neighbor received-routes " + neighbor_address + " all\n" 
-            show_neighbor_result = self.rest_get_neighbor(target_host, neighbor_address)
+            show_cmd = "bgpd> show neighbor received-routes " + \
+                       neighbor_address + " all\n" 
+            show_neighbor_result = self.rest_get_neighbor(target_host,
+                                                          neighbor_address)
             show_neighbor_result = show_cmd + show_neighbor_result
         elif show_type == "cli":
-            show_neighbor_result = self.cli_get_neighbor(target_host, neighbor_address)
+            show_neighbor_result = self.cli_get_neighbor(target_host,
+                                                         neighbor_address)
         else:
             show_neighbor_result = "N/A"
 
@@ -264,11 +267,7 @@ class TestAutomation(app_manager.RyuApp):
         return result
 
     def cli_get_neighbor(self, cli_host, address):
-        session = telnetlib.Telnet(cli_host)
-        cli_content = "show bgp all neighbors " + address + " received-routes\n"
-        session.write(cli_content)
-        session.write("exit\n")
-        return session.read_all()
+        return "N/A"
 
     def rest_get_rib(self, rest_host):
         dpid = "0000000000000001"
@@ -283,7 +282,7 @@ class TestAutomation(app_manager.RyuApp):
 
     def cli_get_rib(self, cli_host):
         session = telnetlib.Telnet(cli_host)
-        cli_content = "show bgp all\n"
+        cli_content = "show bgp vpnv4 unicast all\n"
         session.write(cli_content)
         session.write("exit\n")
         return session.read_all()
