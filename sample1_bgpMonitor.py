@@ -175,22 +175,20 @@ class BMPStation(app_manager.RyuApp):
         nlri_list = []
         bmp_result['message_type'] = "BGP_Update(withdraw)"
         for data in msg.bgp_update.path_attributes:
-            if isinstance(data, bgp.BGPPathAttributeNextHop):
-                bmp_result['nexthop'] = data.value
+            if isinstance(data, bgp.BGPPathAttributeMultiExitDisc):
+                bmp_result['MULTI_EXIT_DISC'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeAsPath):
-                bmp_result['AsPath'] = data.path_seg_list
-            elif isinstance(data, bgp.BGPPathAttributeMultiExitDisc):
-                bmp_result['MultiExitDisc'] = data.value
+                bmp_result['AS_PATH'] = data.path_seg_list
             elif isinstance(data, bgp.BGPPathAttributeOrigin):
-                bmp_result['Origin'] = data.value
+                bmp_result['ORIGIN'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeLocalPref):
-                bmp_result['LocalPref'] = data.value
+                bmp_result['LOCAL_PREF'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeOriginatorId):
-                bmp_result['OriginatorId'] = data.value
+                bmp_result['ORIGINATOR_ID'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeClusterList):
-                bmp_result['ClusterList'] = data.value
+                bmp_result['CLUSTER_LIST'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeCommunities):
-                bmp_result['Communities'] = data.value
+                bmp_result['COMMUNITIES'] = data.value
         for del_nlri in msg.bgp_update.withdrawn_routes:
             nlri = {}
             nlri['prefix'] = del_nlri.prefix
@@ -202,22 +200,22 @@ class BMPStation(app_manager.RyuApp):
         nlri_list = []
         bmp_result['message_type'] = "BGP_Update"
         for data in msg.bgp_update.path_attributes:
-            if isinstance(data, bgp.BGPPathAttributeNextHop):
-                bmp_result['nexthop'] = data.value
+            if isinstance(data, bgp.BGPPathAttributeMultiExitDisc):
+                bmp_result['MULTI_EXIT_DISC'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeAsPath):
-                bmp_result['AsPath'] = data.path_seg_list
-            elif isinstance(data, bgp.BGPPathAttributeMultiExitDisc):
-                bmp_result['MultiExitDisc'] = data.value
+                bmp_result['AS_PATH'] = data.path_seg_list
             elif isinstance(data, bgp.BGPPathAttributeOrigin):
-                bmp_result['Origin'] = data.value
+                bmp_result['ORIGIN'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeLocalPref):
-                bmp_result['LocalPref'] = data.value
+                bmp_result['LOCAL_PREF'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeOriginatorId):
-                bmp_result['OriginatorId'] = data.value
+                bmp_result['ORIGINATOR_ID'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeClusterList):
-                bmp_result['ClusterList'] = data.value
+                bmp_result['CLUSTER_LIST'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeCommunities):
-                bmp_result['Communities'] = data.value
+                bmp_result['COMMUNITIES'] = data.value
+            elif isinstance(data, bgp.BGPPathAttributeNextHop):
+                bmp_result['NEXT_HOP'] = data.value
         for add_nlri in msg.bgp_update.nlri:
             nlri = {}
             nlri['prefix'] = add_nlri.prefix
@@ -226,37 +224,45 @@ class BMPStation(app_manager.RyuApp):
         return bmp_result
 
     def extract_mpbgp(self, msg, bmp_result):
-        nlri_list = []
         for data in msg.bgp_update.path_attributes:
-            nlri = {}
             if isinstance(data, bgp.BGPPathAttributeMultiExitDisc):
-                bmp_result['MultiExitDisc'] = data.value
+                bmp_result['MULTI_EXIT_DISC'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeAsPath):
-                bmp_result['AsPath'] = data.path_seg_list
+                bmp_result['AS_PATH'] = data.path_seg_list
             elif isinstance(data, bgp.BGPPathAttributeOrigin):
-                bmp_result['Origin'] = data.value
+                bmp_result['ORIGIN'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeLocalPref):
-                bmp_result['LocalPref'] = data.value
+                bmp_result['LOCAL_PREF'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeOriginatorId):
-                bmp_result['OriginatorId'] = data.value
+                bmp_result['ORIGINATOR_ID'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeClusterList):
-                bmp_result['ClusterList'] = data.value
+                bmp_result['CLUSTER_LIST'] = data.value
             elif isinstance(data, bgp.BGPPathAttributeExtendedCommunities):
-                bmp_result['ExtendedCommunities'] = data.rt_list
-            elif isinstance(data, bgp.BGPPathAttributeMpUnreachNLRI):
-                bmp_result['message_type'] = "BGP_Update(withdraw)"
-                for del_nlri in data.withdrawn_routes:
-                    nlri['prefix'] = del_nlri.prefix
-                    nlri['route_dist'] = del_nlri.route_dist
-                    nlri_list.append(nlri)
-                bmp_result['MP_UNREACH_NLRI'] = nlri_list
+                bmp_result['EXTENDED_COMMUNITIES'] = data.rt_list
             elif isinstance(data, bgp.BGPPathAttributeMpReachNLRI):
                 bmp_result['message_type'] = "BGP_Update"
+                mp_reach_nlri = {}
+                add_nlri_list = []
                 for add_nlri in data.nlri:
+                    nlri = {}
                     nlri['prefix'] = add_nlri.prefix
                     nlri['route_dist'] = add_nlri.route_dist
                     nlri['label_list'] = add_nlri.label_list
-                    nlri['nexthop'] = data.next_hop
-                    nlri_list.append(nlri)
-                bmp_result['MP_REACH_NLRI'] = nlri_list
+                    add_nlri_list.append(nlri)
+                mp_reach_nlri['nexthop'] = data.next_hop
+                mp_reach_nlri['nlri'] = add_nlri_list
+                bmp_result['MP_REACH_NLRI'] = mp_reach_nlri
+            elif isinstance(data, bgp.BGPPathAttributeMpUnreachNLRI):
+                bmp_result['message_type'] = "BGP_Update(withdraw)"
+                mp_unreach_nlri = {}
+                del_nlri_list = []
+                for del_nlri in data.withdrawn_routes:
+                    nlri = {}
+                    nlri['prefix'] = del_nlri.prefix
+                    nlri['route_dist'] = del_nlri.route_dist
+                    nlri['label_list'] = del_nlri.label_list
+                    del_nlri_list.append(nlri)
+                mp_unreach_nlri['nlri'] = del_nlri_list
+                bmp_result['MP_UNREACH_NLRI'] = mp_unreach_nlri
+
         return bmp_result
