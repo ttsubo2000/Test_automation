@@ -324,7 +324,7 @@ class TestController(ControllerBase):
                         content_type = 'application/json',
                         body = message)
 
-    @route('router', '/apgw/event', methods=['GET'])
+    @route('router', '/apgw/event', methods=['POST'])
     def show_event(self, req, **kwargs):
         event_param = eval(req.body)
 

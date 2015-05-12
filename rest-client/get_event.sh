@@ -12,7 +12,7 @@ from common_func import request_info
 def start_get_event(event_id):
     operation = "get_event"
     url_path = "/apgw/event"
-    method = "GET"
+    method = "POST"
     request = '''
 {
 "event": {
