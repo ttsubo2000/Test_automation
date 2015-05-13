@@ -13,7 +13,6 @@ from ryu.lib import hub
 from ryu.lib.hub import StreamServer
 from ryu.lib.packet import bmp
 from ryu.lib.packet import bgp
-from oslo.config import cfg
 
 LOG = logging.getLogger('BgpMonitor')
 LOG.setLevel(logging.DEBUG)

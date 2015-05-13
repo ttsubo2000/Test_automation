@@ -100,11 +100,17 @@ class TestAutomation(app_manager.RyuApp):
         self.targetInfoList[vpnv4_prefix] = TargetTable(peer_as, ping_srcip,
                                                         ping_destip, ssh_host,
                                                         ssh_user, ssh_pass, show_type)
-    def show_eventDetail(self, search_event_id):
-        for event_id, eventResult in self.eventList.items():
-            if str(event_id) == search_event_id:
-                search_info = eventResult.get_all()
-                return search_info
+    def show_eventDetail(self, search_event_id=0):
+        if search_event_id == 0:
+            eventResult = max(self.eventList.items())[1]
+            LOG.info("match_event_id=[%s]"%max(self.eventList.items())[0])
+            search_info = eventResult.get_all()
+        else:
+            for event_id, eventResult in self.eventList.items():
+                if str(event_id) == search_event_id:
+                    search_info = eventResult.get_all()
+                    break
+        return search_info
 
     def lookup_bmp_result(self):
         event_id = 0
@@ -334,6 +340,14 @@ class TestController(ControllerBase):
                         content_type = 'application/json',
                         body = message)
 
+    @route('router', '/apgw/event/latest', methods=['GET'])
+    def show_event_latest(self, req, **kwargs):
+        result = self.showEventLatest()
+        message = json.dumps(result)
+        return Response(status=200,
+                        content_type = 'application/json',
+                        body = message)
+
     def pingTarget(self, pingTarget_param):
         testCtrl = self.test_spp
         peer_as = pingTarget_param['target']['peer_as']
@@ -395,3 +409,38 @@ class TestController(ControllerBase):
                 }
             }
 
+
+    def showEventLatest(self):
+        testCtrl = self.test_spp
+        search_info = testCtrl.show_eventDetail()
+
+        if search_info:
+            event_id = search_info['event_id']
+            event_time = search_info['event_time']
+            event_type = search_info['event_type']
+            peer_bgp_id = search_info['peer_bgp_id']
+            peer_as = search_info['peer_as']
+            received_time = search_info['received_time']
+            vpnv4_prefix = search_info['vpnv4_prefix']
+            nexthop = search_info['nexthop']
+            ping_result = search_info['ping_result']
+            ping_recv = search_info['ping_recv']
+            show_neighbor_result = search_info['show_neighbor_result']
+            show_rib_result = search_info['show_rib_result']
+
+            return {
+                'event': {
+                    'event_id': '%s' % event_id,
+                    'event_time': '%s' % event_time,
+                    'event_type': '%s' % event_type,
+                    'peer_bgp_id': '%s' % peer_bgp_id,
+                    'peer_as': '%s' % peer_as,
+                    'received_time': '%s' % received_time,
+                    'vpnv4_prefix': '%s' % vpnv4_prefix,
+                    'nexthop': '%s' % nexthop,
+                    'ping_result': '%s' % ping_result,
+                    'ping_recv': '%s' % ping_recv,
+                    'show_neighbor_result': '%s' % show_neighbor_result,
+                    'show_rib_result': '%s' % show_rib_result,
+                }
+            }
